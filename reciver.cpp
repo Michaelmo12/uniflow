@@ -1,22 +1,3 @@
-// receiver.cpp
-//
-// Uniflow — RX-side C++ Receiver.
-//
-// Responsibilities (and ONLY these — status/hashing lives in the Python
-// Session Manager on the other side of the IPC socket):
-//   - Listen for UniflowPacket datagrams on UDP port 5005.
-//   - Verify payload integrity via CRC32; silently drop corrupt packets.
-//   - Buffer packets per block_id until N valid packets are present.
-//   - Hand the block to reconstruct_block() (Reed-Solomon decode stub).
-//   - pwrite() DATA packets to disk at their exact byte offset.
-//   - Notify the Session Manager over a Unix Domain Socket with small JSON
-//     status events. Payload bytes never cross the IPC boundary.
-//
-// Build:
-//   protoc --cpp_out=. uniflow.proto
-//   g++ -std=c++17 -O2 -Wall -Wextra receiver.cpp uniflow.pb.cc -o receiver
-//       $(pkg-config --cflags --libs protobuf) -lpthread
-
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -47,9 +28,6 @@
 #include "uniflow.pb.h"
 using namespace uniflow;
 
-// ============================================================================
-// Configuration
-// ============================================================================
 namespace cfg {
 constexpr uint32_t N = 100;                      // data packets per block
 constexpr uint32_t K = 70;                      // pairity packets per block
@@ -58,14 +36,9 @@ constexpr uint32_t PAYLOAD_SIZE = 1024;        //bytes
 constexpr uint16_t LISTEN_PORT = 5005;
 constexpr const char* STATUS_SOCK_PATH = "/tmp/uniflow_status.sock";
 constexpr const char* OUTPUT_DIR = "received_files";
-// Generous upper bound for one serialized UniflowPacket on the wire
-// (1024B payload + protobuf field overhead + filename).
 constexpr size_t MAX_DATAGRAM_SIZE = 2048;
-} // namespace cfg
+} 
 
-// ============================================================================
-// CRC32 (IEEE 802.3 / zlib-compatible: poly 0xEDB88320, init/xorout 0xFFFFFFFF)
-// ============================================================================
 uint32_t crc32(const std::string& data) {
     static const std::array<uint32_t, 256> table = [] {
         std::array<uint32_t, 256> t{};
@@ -86,9 +59,6 @@ uint32_t crc32(const std::string& data) {
     return crc ^ 0xFFFFFFFFu;
 }
 
-// ============================================================================
-// Small helpers
-// ============================================================================
 std::string bytes_to_hex(const std::string& bytes) {
     static const char* hex = "0123456789abcdef";
     std::string out;
@@ -123,8 +93,6 @@ std::string json_escape(const std::string& s) {
     return out;
 }
 
-// Only a handful of numeric/hex/enum fields ever leave the process over IPC —
-// never payload bytes, satisfying requirement 7.
 std::string make_status_json(const std::string& type,
                               const std::string& file_name,
                               uint32_t block_id,
@@ -140,10 +108,7 @@ std::string make_status_json(const std::string& type,
         << "}";
     return oss.str();
 }
-// ============================================================================
-// Galois Field 256 (GF256) Arithmetic Engine
-// Uses the standard primitive polynomial 0x11B (used by AES and most FECs).
-// ============================================================================
+
 struct GF256 {
     std::array<uint8_t, 512> exp_tab;
     std::array<uint8_t, 256> log_tab;
@@ -174,26 +139,89 @@ struct GF256 {
     }
 };
 
-static const GF256 gf; // Instantiated once, thread-safe
-// ============================================================================
-// Reed-Solomon reconstruction — STUB (requirement 5)
-//
-// Contract: `block` arrives holding exactly cfg::N valid, CRC-checked
-// UniflowPacket entries for a single block_id — any mix of DATA/PARITY. On
-// success this function must leave `block` containing the cfg::N DATA
-// packets for that block_id (packet_index 0..N-1, payload/payload_size
-// populated) sorted by packet_index, ready to be written to disk.
-//
-// TODO(rs-decode): replace with a real GF(256) Reed-Solomon decoder (e.g. a
-// Vandermonde/Cauchy matrix inverse, ISA-L, or Jerasure) that recovers the
-// missing DATA shards from PARITY shards. Until then, only the "no loss"
-// case (all N received packets are already DATA) is handled; any block that
-// needed real parity-based recovery is reported as not-yet-implemented so
-// callers fail loudly instead of writing corrupt/incomplete data.
-// ============================================================================
+static const GF256 gf;
+#include <vector>
+
+std::vector<std::vector<uint8_t>> generate_encoding_matrix(uint32_t n, uint32_t k) {
+    std::vector<std::vector<uint8_t>> matrix(n + k, std::vector<uint8_t>(n, 0));
+
+    for (uint32_t i = 0; i < n; ++i) {
+        matrix[i][i] = 1;
+    }
+
+    for (uint32_t i = 0; i < k; ++i) {
+        uint8_t row_val = n + i;
+        for (uint32_t j = 0; j < n; ++j) {
+            uint8_t col_val = j;
+            
+            uint8_t xor_sum = row_val ^ col_val;
+            
+            matrix[n + i][j] = gf.div(1, xor_sum);
+        }
+    }
+
+    return matrix;
+}
+bool invert_matrix(std::vector<std::vector<uint8_t>>& matrix, uint32_t n) {
+    std::vector<std::vector<uint8_t>> aug(n, std::vector<uint8_t>(2 * n, 0));
+    for (uint32_t i = 0; i < n; ++i) {
+        for (uint32_t j = 0; j < n; ++j) aug[i][j] = matrix[i][j];
+        aug[i][n + i] = 1;
+    }
+
+    // דירוג מטריצה
+    for (uint32_t i = 0; i < n; ++i) {
+        // חיפוש Pivot שאינו אפס
+        if (aug[i][i] == 0) {
+            bool swapped = false;
+            for (uint32_t k = i + 1; k < n; ++k) {
+                if (aug[k][i] != 0) {
+                    std::swap(aug[i], aug[k]);
+                    swapped = true;
+                    break;
+                }
+            }
+            if (!swapped) return false;
+        }
+
+        // נרמול השורה כדי שה-Pivot יהיה 1
+        uint8_t inv_pivot = gf.div(1, aug[i][i]);
+        for (uint32_t j = i; j < 2 * n; ++j) {
+            aug[i][j] = gf.mul(aug[i][j], inv_pivot);
+        }
+
+        // איפוס שאר השורות בעמודה i
+        for (uint32_t k = 0; k < n; ++k) {
+            if (k != i) {
+                uint8_t factor = aug[k][i];
+                if (factor != 0) {
+                    for (uint32_t j = i; j < 2 * n; ++j) {
+                        aug[k][j] = gf.add(aug[k][j], gf.mul(factor, aug[i][j]));
+                    }
+                }
+            }
+        }
+    }
+
+    // חילוץ המטריצה ההפוכה מהחצי הימני
+    for (uint32_t i = 0; i < n; ++i) {
+        for (uint32_t j = 0; j < n; ++j) {
+            matrix[i][j] = aug[i][n + j];
+        }
+    }
+    return true;
+}
+
 bool reconstruct_block(std::vector<UniflowPacket>& block) {
-    const bool all_data = std::all_of(block.begin(), block.end(),
-        [](const UniflowPacket& p) { return p.type() == UniflowPacket::DATA; });
+    if (block.size() != cfg::N) return false;
+
+    bool all_data = true;
+    for (const auto& pkt : block) {
+        if (pkt.type() != UniflowPacket::DATA) {
+            all_data = false;
+            break;
+        }
+    }
 
     if (all_data) {
         std::sort(block.begin(), block.end(),
@@ -203,17 +231,64 @@ bool reconstruct_block(std::vector<UniflowPacket>& block) {
         return true;
     }
 
-    std::cerr << "[reconstruct] block "
-              << (block.empty() ? 0 : block.front().block_id())
-              << " needs RS decode (parity shard present) — decoder not yet"
-                 " implemented in this stub\n";
-    return false;
+    auto full_matrix = generate_encoding_matrix(cfg::N, cfg::K);
+
+    std::vector<std::vector<uint8_t>> submatrix(cfg::N, std::vector<uint8_t>(cfg::N, 0));
+    for (uint32_t i = 0; i < cfg::N; ++i) {
+        uint32_t pkt_idx = block[i].packet_index();
+        for (uint32_t j = 0; j < cfg::N; ++j) {
+            submatrix[i][j] = full_matrix[pkt_idx][j];
+        }
+    }
+
+    if (!invert_matrix(submatrix, cfg::N)) {
+        std::cerr << "[reconstruct] Matrix inversion failed! Cauchy constraint broken.\n";
+        return false;
+    }
+
+    std::vector<std::vector<uint8_t>> recovered(cfg::N, std::vector<uint8_t>(cfg::PAYLOAD_SIZE, 0));
+    
+    for (uint32_t i = 0; i < cfg::N; ++i) {           // i = החבילה המקורית שאנחנו משחזרים עכשיו
+        for (uint32_t j = 0; j < cfg::N; ++j) {       // j = רץ על החבילות שהגיעו
+            uint8_t factor = submatrix[i][j];
+            if (factor == 0) continue;
+            
+            const std::string& payload = block[j].payload();
+            size_t len = std::min((size_t)cfg::PAYLOAD_SIZE, payload.size());
+            
+            for (size_t b = 0; b < len; ++b) {
+                recovered[i][b] = gf.add(recovered[i][b], 
+                                         gf.mul(factor, static_cast<uint8_t>(payload[b])));
+            }
+        }
+    }
+
+    std::vector<UniflowPacket> new_block;
+    new_block.reserve(cfg::N);
+    
+    uint32_t block_id = block[0].block_id();
+    const std::string file_name = block[0].file_name();
+    uint32_t total_blocks = block[0].total_blocks();
+    const std::string file_hash = block[0].file_hash();
+
+    for (uint32_t i = 0; i < cfg::N; ++i) {
+        UniflowPacket pkt;
+        pkt.set_file_name(file_name);
+        pkt.set_block_id(block_id);
+        pkt.set_packet_index(i);
+        pkt.set_type(UniflowPacket::DATA);
+        pkt.set_payload(recovered[i].data(), cfg::PAYLOAD_SIZE);
+        pkt.set_payload_size(cfg::PAYLOAD_SIZE);
+        pkt.set_total_blocks(total_blocks);
+        pkt.set_file_hash(file_hash);
+        
+        new_block.push_back(std::move(pkt));
+    }
+
+    block = std::move(new_block);
+    return true;
 }
 
-// ============================================================================
-// ThreadPool — decouples the UDP receive hot-path from block reconstruction,
-// disk I/O, and IPC, all of which can block or take non-trivial time.
-// ============================================================================
 class ThreadPool {
 public:
     explicit ThreadPool(size_t worker_count) {
@@ -268,20 +343,14 @@ private:
     bool stop_ = false;
 };
 
-// ============================================================================
-// BlockBufferManager — thread-safe accumulation of valid packets per block_id.
-// ============================================================================
 class BlockBufferManager {
 public:
-    // Adds a validated packet. If it brings the block up to cfg::N packets,
-    // moves the completed block into `out` and returns true. Packets for a
-    // block_id that already completed (stragglers, duplicates) are dropped.
     bool add_packet(UniflowPacket&& pkt, std::vector<UniflowPacket>& out) {
         std::lock_guard<std::mutex> lk(mtx_);
         const uint32_t block_id = pkt.block_id();
 
         if (completed_.count(block_id) != 0) {
-            return false; // already dispatched for reconstruction; ignore
+            return false;
         }
 
         auto& vec = buffers_[block_id];
@@ -299,17 +368,9 @@ public:
 private:
     std::mutex mtx_;
     std::unordered_map<uint32_t, std::vector<UniflowPacket>> buffers_;
-    // NOTE: grows for the life of the process. For very long-running
-    // transfers this could be pruned once block_id exceeds total_blocks,
-    // or evicted on an explicit "transfer finished" signal.
     std::unordered_set<uint32_t> completed_;
 };
 
-// ============================================================================
-// FileManager — one output fd per file_name, safe for concurrent pwrite()
-// from multiple worker threads (each write targets a disjoint byte range,
-// which POSIX guarantees is atomic/non-interfering for pwrite).
-// ============================================================================
 class FileManager {
 public:
     ~FileManager() {
@@ -324,8 +385,6 @@ public:
     FileManager& operator=(const FileManager&) = delete;
     FileManager() = default;
 
-    // Returns an open fd for file_name (creating the file if needed), or -1
-    // on failure. errno is left set as reported by open() on failure.
     int get_fd(const std::string& file_name) {
         std::lock_guard<std::mutex> lk(mtx_);
         auto it = fds_.find(file_name);
@@ -335,12 +394,11 @@ public:
 
         const std::string path = std::string(cfg::OUTPUT_DIR) + "/" + sanitize(file_name);
         int fd = ::open(path.c_str(), O_WRONLY | O_CREAT, 0644);
-        fds_[file_name] = fd; // cache result (including -1) to avoid hammering open()
+        fds_[file_name] = fd;
         return fd;
     }
 
 private:
-    // Prevent path traversal / directory escape via a hostile file_name.
     static std::string sanitize(const std::string& name) {
         std::string out;
         out.reserve(name.size());
@@ -356,17 +414,11 @@ private:
     std::unordered_map<std::string, int> fds_;
 };
 
-// ============================================================================
-// IpcClient — resilient Unix Domain Socket client to the Python Session
-// Manager. Connection failures never take down the receiver: events are
-// logged locally and dropped if the status socket is unreachable, and the
-// next send() attempt reconnects.
-// ============================================================================
 class IpcClient {
 public:
     explicit IpcClient(std::string path) : path_(std::move(path)) {
         std::lock_guard<std::mutex> lk(mtx_);
-        connect_locked(); // best-effort; ok if the session manager isn't up yet
+        connect_locked();
     }
 
     ~IpcClient() {
@@ -384,7 +436,7 @@ public:
             return;
         }
 
-        const std::string msg = json + "\n"; // newline-delimited for the Python side
+        const std::string msg = json + "\n";
         const ssize_t n = ::send(fd_, msg.data(), msg.size(), MSG_NOSIGNAL);
         if (n < 0 || static_cast<size_t>(n) != msg.size()) {
             std::cerr << "[ipc] send failed (" << std::strerror(errno) << "); will reconnect on next event\n";
@@ -417,9 +469,6 @@ private:
     std::mutex mtx_;
 };
 
-// ============================================================================
-// Block processing — runs on a ThreadPool worker, off the recv hot-path.
-// ============================================================================
 void process_completed_block(std::vector<UniflowPacket> block, FileManager& file_mgr, IpcClient& ipc) {
     if (block.empty()) return;
 
@@ -444,7 +493,7 @@ void process_completed_block(std::vector<UniflowPacket> block, FileManager& file
     }
 
     for (const auto& pkt : block) {
-        if (pkt.type() != UniflowPacket::DATA) continue; // PARITY is NEVER written to disk
+        if (pkt.type() != UniflowPacket::DATA) continue;
 
         const size_t declared = pkt.payload_size();
         const size_t available = pkt.payload().size();
@@ -464,19 +513,13 @@ void process_completed_block(std::vector<UniflowPacket> block, FileManager& file
     ipc.send_json(make_status_json("BLOCK_COMPLETE", file_name, block_id, total_blocks, file_hash_hex));
 }
 
-// ============================================================================
-// Graceful shutdown
-// ============================================================================
 std::atomic<bool> g_running{true};
 void handle_signal(int) { g_running.store(false); }
 
-// ============================================================================
-// main
-// ============================================================================
 int main() {
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
-    std::signal(SIGPIPE, SIG_IGN); // belt-and-braces; send() already uses MSG_NOSIGNAL
+    std::signal(SIGPIPE, SIG_IGN);
 
     if (::mkdir(cfg::OUTPUT_DIR, 0755) < 0 && errno != EEXIST) {
         std::cerr << "warning: could not create output directory '" << cfg::OUTPUT_DIR
@@ -492,8 +535,6 @@ int main() {
     int reuse = 1;
     ::setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 
-    // Bound recv so the loop can periodically re-check g_running for a clean
-    // shutdown on SIGINT/SIGTERM instead of blocking forever in recvfrom().
     timeval rcv_timeout{1, 0};
     ::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout));
 
@@ -527,7 +568,7 @@ int main() {
                                       reinterpret_cast<sockaddr*>(&src), &src_len);
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
-                continue; // recv timeout — loop back and re-check g_running
+                continue;
             }
             std::cerr << "[receiver] recvfrom() error: " << std::strerror(errno) << "\n";
             continue;
@@ -536,14 +577,12 @@ int main() {
 
         UniflowPacket pkt;
         if (!pkt.ParseFromArray(buffer.data(), static_cast<int>(n))) {
-            // Malformed datagram (not a valid UniflowPacket) — not the same
-            // as a CRC failure on real data, worth a log line while debugging.
             std::cerr << "[receiver] dropped unparsable datagram (" << n << " bytes)\n";
             continue;
         }
 
         if (crc32(pkt.payload()) != pkt.crc32()) {
-            continue; // requirement 3: silently drop on CRC mismatch
+            continue;
         }
 
         std::vector<UniflowPacket> completed_block;
@@ -556,5 +595,5 @@ int main() {
 
     std::cout << "[receiver] shutting down...\n";
     ::close(sock);
-    return 0; // ThreadPool/FileManager/IpcClient destructors flush and join cleanly
+    return 0;
 }
