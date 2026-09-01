@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "uniflow.pb.h"
+
 /**
  * Creates, binds, and starts listening on a Unix domain socket at the given path.
  *
@@ -17,3 +19,21 @@ int setup_ipc_socket(const char* socket_path);
  * @return The message received from File Monitor
  */
 std::string wait_for_file_monitor(int ipc_fd);
+
+/**
+ * Builds a minimal UniflowPacket wrapping the given message.
+ *
+ * @param message Text to wrap in the packet's payload
+ * @return A populated UniflowPacket, ready to serialize
+ */
+uniflow::UniflowPacket build_packet(const std::string& message);
+
+/**
+ * Serializes the packet and sends it as one UDP datagram to the given address.
+ *
+ * @param packet The packet to send
+ * @param ip Destination IP address as a string, e.g. "127.0.0.1"
+ * @param port Destination UDP port
+ * @return true on success, false on failure
+ */
+bool send_packet(const uniflow::UniflowPacket& packet, const char* ip, int port);
