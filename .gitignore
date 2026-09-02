@@ -2,3 +2,5 @@
 generated/
 
 build/
+
+.vscode/
