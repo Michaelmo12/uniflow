@@ -1,4 +1,5 @@
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstring>
 #include <iostream>
@@ -29,22 +30,25 @@ void process_completed_block(std::vector<UniflowPacket> block, FileManager& file
     const std::string file_name = block.front().file_name();
     const uint32_t total_blocks = block.front().total_blocks();
     const std::string file_hash_hex = bytes_to_hex(block.front().file_hash());
+    const std::string file_hash = block.front().file_hash();
+    const uint64_t file_size = block.front().file_size();
 
     if (!fec::reconstruct_block(block)) {
         std::cerr << "[receiver] block " << block_id << " of '" << file_name
                   << "' failed reconstruction; nothing written to disk\n";
-        ipc.send_json(make_status_json("BLOCK_FAILED", file_name, block_id, total_blocks, file_hash_hex));
+        ipc.send_json(make_status_json("BLOCK_FAILED", file_name, block_id, total_blocks, file_hash_hex, file_size));
         return;
     }
 
-    const int fd = file_mgr.get_fd(file_name);
+    const int fd = file_mgr.get_fd(file_name, file_hash, file_size);
     if (fd < 0) {
         std::cerr << "[receiver] could not open output file for '" << file_name
                   << "': " << std::strerror(errno) << "\n";
-        ipc.send_json(make_status_json("BLOCK_FAILED", file_name, block_id, total_blocks, file_hash_hex));
+        ipc.send_json(make_status_json("BLOCK_FAILED", file_name, block_id, total_blocks, file_hash_hex, file_size));
         return;
     }
 
+    bool any_write_failed = false;
     for (const auto& pkt : block) {
         if (pkt.type() != UniflowPacket::DATA) continue;
 
@@ -60,10 +64,16 @@ void process_completed_block(std::vector<UniflowPacket> block, FileManager& file
         if (written < 0 || static_cast<size_t>(written) != write_len) {
             std::cerr << "[receiver] pwrite failed for '" << file_name << "' block " << block_id
                       << " index " << pkt.packet_index() << ": " << std::strerror(errno) << "\n";
+            any_write_failed = true;
         }
     }
 
-    ipc.send_json(make_status_json("BLOCK_COMPLETE", file_name, block_id, total_blocks, file_hash_hex));
+    if (any_write_failed) {
+        ipc.send_json(make_status_json("BLOCK_FAILED", file_name, block_id, total_blocks, file_hash_hex, file_size));
+        return;
+    }
+
+    ipc.send_json(make_status_json("BLOCK_COMPLETE", file_name, block_id, total_blocks, file_hash_hex, file_size));
 }
 
 std::atomic<bool> g_running{true};
@@ -78,6 +88,12 @@ int make_listen_socket() {
 
     int reuse = 1;
     ::setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+    int rcvbuf = 4 * 1024 * 1024;
+    if (::setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) < 0) {
+        std::cerr << "warning: could not raise SO_RCVBUF; high packet rates may see "
+                     "kernel-level drops before packets ever reach the CRC check\n";
+    }
 
     timeval rcv_timeout{1, 0};
     ::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout));
@@ -107,6 +123,7 @@ int main() {
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
     std::signal(SIGPIPE, SIG_IGN);
+    std::signal(SIGXFSZ, SIG_IGN);
 
     if (::mkdir(cfg::OUTPUT_DIR, 0755) < 0 && errno != EEXIST) {
         std::cerr << "warning: could not create output directory '" << cfg::OUTPUT_DIR
@@ -125,8 +142,21 @@ int main() {
     ThreadPool pool(std::max(2u, std::thread::hardware_concurrency()));
 
     std::vector<char> buffer(cfg::MAX_DATAGRAM_SIZE);
+    auto last_sweep = std::chrono::steady_clock::now();
 
     while (g_running.load()) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_sweep >= cfg::STALE_SWEEP_INTERVAL) {
+            last_sweep = now;
+            for (auto& tb : block_mgr.sweep_stale(cfg::STALE_BLOCK_TIMEOUT)) {
+                std::cerr << "[receiver] block " << tb.block_id << " of '" << tb.file_name
+                          << "' timed out with " << tb.packets_received << "/" << cfg::N
+                          << " packets — giving up, freeing buffer\n";
+                ipc.send_json(make_status_json("BLOCK_FAILED", tb.file_name, tb.block_id,
+                                                tb.total_blocks, tb.file_hash_hex, tb.file_size));
+            }
+        }
+
         sockaddr_in src{};
         socklen_t src_len = sizeof(src);
 
@@ -147,7 +177,9 @@ int main() {
             continue;
         }
 
-        if (crc32(pkt.payload()) != pkt.crc32()) {
+        if (crc32_frame(pkt.payload(), pkt.block_id(), pkt.packet_index(),
+                         static_cast<uint8_t>(pkt.type()), pkt.payload_size(),
+                         pkt.file_size()) != pkt.crc32()) {
             continue;
         }
 

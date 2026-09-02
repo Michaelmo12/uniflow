@@ -4,8 +4,8 @@
 #include "uniflow.pb.h"
 
 namespace fec {
-bool init();
 
+bool init();
 
 bool reconstruct_block(std::vector<uniflow::UniflowPacket>& block);
 

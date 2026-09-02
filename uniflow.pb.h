@@ -242,6 +242,7 @@ class UniflowPacket final :
     kPayloadSizeFieldNumber = 6,
     kTotalBlocksFieldNumber = 7,
     kCrc32FieldNumber = 9,
+    kFileSizeFieldNumber = 10,
   };
   // string file_name = 1;
   void clear_file_name();
@@ -339,6 +340,15 @@ class UniflowPacket final :
   void _internal_set_crc32(uint32_t value);
   public:
 
+  // uint64 file_size = 10;
+  void clear_file_size();
+  uint64_t file_size() const;
+  void set_file_size(uint64_t value);
+  private:
+  uint64_t _internal_file_size() const;
+  void _internal_set_file_size(uint64_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:uniflow.UniflowPacket)
  private:
   class _Internal;
@@ -356,6 +366,7 @@ class UniflowPacket final :
     uint32_t payload_size_;
     uint32_t total_blocks_;
     uint32_t crc32_;
+    uint64_t file_size_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -640,6 +651,26 @@ inline void UniflowPacket::_internal_set_crc32(uint32_t value) {
 inline void UniflowPacket::set_crc32(uint32_t value) {
   _internal_set_crc32(value);
   // @@protoc_insertion_point(field_set:uniflow.UniflowPacket.crc32)
+}
+
+// uint64 file_size = 10;
+inline void UniflowPacket::clear_file_size() {
+  _impl_.file_size_ = uint64_t{0u};
+}
+inline uint64_t UniflowPacket::_internal_file_size() const {
+  return _impl_.file_size_;
+}
+inline uint64_t UniflowPacket::file_size() const {
+  // @@protoc_insertion_point(field_get:uniflow.UniflowPacket.file_size)
+  return _internal_file_size();
+}
+inline void UniflowPacket::_internal_set_file_size(uint64_t value) {
+  
+  _impl_.file_size_ = value;
+}
+inline void UniflowPacket::set_file_size(uint64_t value) {
+  _internal_set_file_size(value);
+  // @@protoc_insertion_point(field_set:uniflow.UniflowPacket.file_size)
 }
 
 #ifdef __GNUC__

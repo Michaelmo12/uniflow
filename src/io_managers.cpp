@@ -1,5 +1,6 @@
 #include "io_managers.hpp"
 #include "config.hpp"
+#include "utils.hpp"
 
 #include <cerrno>
 #include <cstring>
@@ -31,16 +32,23 @@ std::string FileManager::sanitize(const std::string& name) {
     return out;
 }
 
-int FileManager::get_fd(const std::string& file_name) {
+int FileManager::get_fd(const std::string& file_name, const std::string& file_hash,
+                        uint64_t file_size) {
     std::lock_guard<std::mutex> lk(mtx_);
     auto it = fds_.find(file_name);
     if (it != fds_.end() && it->second >= 0) {
-        return it->second;
+        const auto identity = identities_.find(file_name);
+        if (identity != identities_.end() && identity->second.file_hash == file_hash &&
+            identity->second.file_size == file_size) {
+            return it->second;
+        }
+        ::close(it->second);
     }
 
     const std::string path = std::string(cfg::OUTPUT_DIR) + "/" + sanitize(file_name);
-    int fd = ::open(path.c_str(), O_WRONLY | O_CREAT, 0644);
+    int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     fds_[file_name] = fd;
+    identities_[file_name] = FileIdentity{file_hash, file_size};
     return fd;
 }
 
@@ -90,20 +98,48 @@ void IpcClient::send_json(const std::string& json) {
 
 bool BlockBufferManager::add_packet(UniflowPacket&& pkt, std::vector<UniflowPacket>& out) {
     std::lock_guard<std::mutex> lk(mtx_);
-    const uint32_t block_id = pkt.block_id();
+    BlockKey key{pkt.file_name(), pkt.block_id()};
 
-    if (completed_.count(block_id) != 0) {
+    if (resolved_.count(key) != 0) {
         return false;
     }
 
-    auto& vec = buffers_[block_id];
-    vec.push_back(std::move(pkt));
+    auto& entry = buffers_[key];
+    entry.last_update = std::chrono::steady_clock::now();
+    entry.packets.push_back(std::move(pkt));
 
-    if (vec.size() == cfg::N) {
-        out = std::move(vec);
-        buffers_.erase(block_id);
-        completed_.insert(block_id);
+    if (entry.packets.size() == cfg::N) {
+        out = std::move(entry.packets);
+        buffers_.erase(key);
+        resolved_.insert(key);
         return true;
     }
     return false;
 }
+
+std::vector<BlockBufferManager::TimedOutBlock>
+BlockBufferManager::sweep_stale(std::chrono::steady_clock::duration timeout) {
+    std::vector<TimedOutBlock> out;
+    const auto now = std::chrono::steady_clock::now();
+
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (auto it = buffers_.begin(); it != buffers_.end();) {
+        if (now - it->second.last_update >= timeout) {
+            const UniflowPacket& first_pkt = it->second.packets.front();
+            out.push_back(TimedOutBlock{
+                it->first.file_name,
+                it->first.block_id,
+                first_pkt.total_blocks(),
+                bytes_to_hex(first_pkt.file_hash()),
+                first_pkt.file_size(),
+                it->second.packets.size(),
+            });
+            resolved_.insert(it->first);
+            it = buffers_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return out;
+}
+

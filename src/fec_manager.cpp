@@ -67,7 +67,6 @@ bool fec::reconstruct_block(std::vector<UniflowPacket>& block) {
         if (pkt.type() != UniflowPacket::DATA) {
             pkt.set_packet_index(shards[i].row);
             pkt.set_type(UniflowPacket::DATA);
-            
             pkt.set_payload_size(cfg::PAYLOAD_SIZE);
         }
     }

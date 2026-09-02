@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 
@@ -15,5 +16,9 @@ constexpr const char* STATUS_SOCK_PATH = "/tmp/uniflow_status.sock";
 constexpr const char* OUTPUT_DIR = "received_files";
 
 constexpr size_t MAX_DATAGRAM_SIZE = 2048;
+
+constexpr std::chrono::seconds STALE_BLOCK_TIMEOUT{5};
+
+constexpr std::chrono::seconds STALE_SWEEP_INTERVAL{1};
 
 }

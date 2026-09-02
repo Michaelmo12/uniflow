@@ -32,6 +32,7 @@ PROTOBUF_CONSTEXPR UniflowPacket::UniflowPacket(
   , /*decltype(_impl_.payload_size_)*/0u
   , /*decltype(_impl_.total_blocks_)*/0u
   , /*decltype(_impl_.crc32_)*/0u
+  , /*decltype(_impl_.file_size_)*/uint64_t{0u}
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct UniflowPacketDefaultTypeInternal {
   PROTOBUF_CONSTEXPR UniflowPacketDefaultTypeInternal()
@@ -63,6 +64,7 @@ const uint32_t TableStruct_uniflow_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
   PROTOBUF_FIELD_OFFSET(::uniflow::UniflowPacket, _impl_.total_blocks_),
   PROTOBUF_FIELD_OFFSET(::uniflow::UniflowPacket, _impl_.file_hash_),
   PROTOBUF_FIELD_OFFSET(::uniflow::UniflowPacket, _impl_.crc32_),
+  PROTOBUF_FIELD_OFFSET(::uniflow::UniflowPacket, _impl_.file_size_),
 };
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::uniflow::UniflowPacket)},
@@ -73,18 +75,18 @@ static const ::_pb::Message* const file_default_instances[] = {
 };
 
 const char descriptor_table_protodef_uniflow_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
-  "\n\runiflow.proto\022\007uniflow\"\376\001\n\rUniflowPack"
+  "\n\runiflow.proto\022\007uniflow\"\221\002\n\rUniflowPack"
   "et\022\021\n\tfile_name\030\001 \001(\t\022\020\n\010block_id\030\002 \001(\r\022"
   "\024\n\014packet_index\030\003 \001(\r\022/\n\004type\030\004 \001(\0162!.un"
   "iflow.UniflowPacket.PacketType\022\017\n\007payloa"
   "d\030\005 \001(\014\022\024\n\014payload_size\030\006 \001(\r\022\024\n\014total_b"
   "locks\030\007 \001(\r\022\021\n\tfile_hash\030\010 \001(\014\022\r\n\005crc32\030"
-  "\t \001(\r\"\"\n\nPacketType\022\010\n\004DATA\020\000\022\n\n\006PARITY\020"
-  "\001b\006proto3"
+  "\t \001(\r\022\021\n\tfile_size\030\n \001(\004\"\"\n\nPacketType\022\010"
+  "\n\004DATA\020\000\022\n\n\006PARITY\020\001b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_uniflow_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_uniflow_2eproto = {
-    false, false, 289, descriptor_table_protodef_uniflow_2eproto,
+    false, false, 308, descriptor_table_protodef_uniflow_2eproto,
     "uniflow.proto",
     &descriptor_table_uniflow_2eproto_once, nullptr, 0, 1,
     schemas, file_default_instances, TableStruct_uniflow_2eproto::offsets,
@@ -145,6 +147,7 @@ UniflowPacket::UniflowPacket(const UniflowPacket& from)
     , decltype(_impl_.payload_size_){}
     , decltype(_impl_.total_blocks_){}
     , decltype(_impl_.crc32_){}
+    , decltype(_impl_.file_size_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
@@ -173,8 +176,8 @@ UniflowPacket::UniflowPacket(const UniflowPacket& from)
       _this->GetArenaForAllocation());
   }
   ::memcpy(&_impl_.block_id_, &from._impl_.block_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.crc32_) -
-    reinterpret_cast<char*>(&_impl_.block_id_)) + sizeof(_impl_.crc32_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.file_size_) -
+    reinterpret_cast<char*>(&_impl_.block_id_)) + sizeof(_impl_.file_size_));
   // @@protoc_insertion_point(copy_constructor:uniflow.UniflowPacket)
 }
 
@@ -192,6 +195,7 @@ inline void UniflowPacket::SharedCtor(
     , decltype(_impl_.payload_size_){0u}
     , decltype(_impl_.total_blocks_){0u}
     , decltype(_impl_.crc32_){0u}
+    , decltype(_impl_.file_size_){uint64_t{0u}}
     , /*decltype(_impl_._cached_size_)*/{}
   };
   _impl_.file_name_.InitDefault();
@@ -238,8 +242,8 @@ void UniflowPacket::Clear() {
   _impl_.payload_.ClearToEmpty();
   _impl_.file_hash_.ClearToEmpty();
   ::memset(&_impl_.block_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.crc32_) -
-      reinterpret_cast<char*>(&_impl_.block_id_)) + sizeof(_impl_.crc32_));
+      reinterpret_cast<char*>(&_impl_.file_size_) -
+      reinterpret_cast<char*>(&_impl_.block_id_)) + sizeof(_impl_.file_size_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -322,6 +326,14 @@ const char* UniflowPacket::_InternalParse(const char* ptr, ::_pbi::ParseContext*
       case 9:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 72)) {
           _impl_.crc32_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // uint64 file_size = 10;
+      case 10:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 80)) {
+          _impl_.file_size_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
         } else
           goto handle_unusual;
@@ -414,6 +426,12 @@ uint8_t* UniflowPacket::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteUInt32ToArray(9, this->_internal_crc32(), target);
   }
 
+  // uint64 file_size = 10;
+  if (this->_internal_file_size() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(10, this->_internal_file_size(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -482,6 +500,11 @@ size_t UniflowPacket::ByteSizeLong() const {
     total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(this->_internal_crc32());
   }
 
+  // uint64 file_size = 10;
+  if (this->_internal_file_size() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_file_size());
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -527,6 +550,9 @@ void UniflowPacket::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::
   if (from._internal_crc32() != 0) {
     _this->_internal_set_crc32(from._internal_crc32());
   }
+  if (from._internal_file_size() != 0) {
+    _this->_internal_set_file_size(from._internal_file_size());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -559,8 +585,8 @@ void UniflowPacket::InternalSwap(UniflowPacket* other) {
       &other->_impl_.file_hash_, rhs_arena
   );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(UniflowPacket, _impl_.crc32_)
-      + sizeof(UniflowPacket::_impl_.crc32_)
+      PROTOBUF_FIELD_OFFSET(UniflowPacket, _impl_.file_size_)
+      + sizeof(UniflowPacket::_impl_.file_size_)
       - PROTOBUF_FIELD_OFFSET(UniflowPacket, _impl_.block_id_)>(
           reinterpret_cast<char*>(&_impl_.block_id_),
           reinterpret_cast<char*>(&other->_impl_.block_id_));

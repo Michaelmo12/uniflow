@@ -24,7 +24,9 @@ all: $(TARGET)
 $(TARGET): $(ALL_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $(ALL_OBJS) $(LDFLAGS)
 
-
+# One `protoc` invocation produces BOTH files, but a naive
+# `$(PROTO_SRC) $(PROTO_HDR): $(PROTO)` rule with a single shared recipe is
+# a classic `make -j` trap: make doesn't know one run satisfies both
 $(PROTO_SRC): $(PROTO)
 	protoc --cpp_out=. $(PROTO)
 
