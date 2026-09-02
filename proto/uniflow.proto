@@ -20,4 +20,6 @@ message UniflowPacket {
   uint32 total_blocks = 7;
   bytes  file_hash    = 8;
   uint32 crc32        = 9;
+  
+  uint64 original_file_size = 10;
 }
