@@ -6,9 +6,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Protobuf REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(ZLIB REQUIRED)
 
 include_directories(${Protobuf_INCLUDE_DIRS} include generated third_party/longhair)
-find_package(OpenSSL REQUIRED)
 
 add_executable(sender
     src/main.cpp
@@ -16,12 +17,15 @@ add_executable(sender
     src/reed_solomon.cpp
     src/file_reader.cpp
     src/hasher.cpp
+    src/block_builder.cpp
+    src/crc32.cpp
+    src/interleaver.cpp
     third_party/longhair/cauchy_256.cpp
-    third_party/longhair/cd ~/uniflowgf256.cpp
+    third_party/longhair/gf256.cpp
     third_party/longhair/SiameseTools.cpp
     generated/uniflow.pb.cc
 )
 
 
 target_compile_options(sender PRIVATE -mssse3)
-target_link_libraries(sender ${Protobuf_LIBRARIES} OpenSSL::Crypto)
+target_link_libraries(sender ${Protobuf_LIBRARIES} OpenSSL::Crypto ZLIB::ZLIB)
