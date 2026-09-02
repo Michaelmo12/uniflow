@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <vector>
+#include <cstdint>
 
 #include "uniflow.pb.h"
 
@@ -21,12 +23,29 @@ int setup_ipc_socket(const char* socket_path);
 std::string wait_for_file_monitor(int ipc_fd);
 
 /**
- * Builds a minimal UniflowPacket wrapping the given message.
+ * Builds a fully-populated UniflowPacket, including computing crc32 over
+ * the given payload.
  *
- * @param message Text to wrap in the packet's payload
+ * @param file_name Original file's name
+ * @param block_id Which block this packet belongs to
+ * @param packet_index Position within the block (0..N+K-1)
+ * @param type DATA or PARITY
+ * @param payload This packet's bytes (a file chunk or parity chunk)
+ * @param total_blocks Total blocks in this file transfer
+ * @param file_hash SHA-256 digest of the original (unpadded) file
+ * @param original_file_size Real size of the original file in bytes
  * @return A populated UniflowPacket, ready to serialize
  */
-uniflow::UniflowPacket build_packet(const std::string& message);
+uniflow::UniflowPacket build_packet(
+    const std::string& file_name,
+    uint32_t block_id,
+    uint32_t packet_index,
+    uniflow::UniflowPacket::PacketType type,
+    const std::vector<uint8_t>& payload,
+    uint32_t total_blocks,
+    const std::vector<uint8_t>& file_hash,
+    uint64_t original_file_size
+);
 
 /**
  * Serializes the packet and sends it as one UDP datagram to the given address.

@@ -1,5 +1,6 @@
 #include "sender/sender.hpp"
 #include "sender/config.hpp"
+#include "sender/crc32.hpp"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -58,19 +59,30 @@ std::string wait_for_file_monitor(int ipc_fd){
     return message;
 }
 
-uniflow::UniflowPacket build_packet(const std::string& message) {
-    // Placeholder values (block_id, file_hash, crc32) until real file
-    // reading and FEC splitting are built. This proves the pipe works.
+uniflow::UniflowPacket build_packet(
+    const std::string& file_name,
+    uint32_t block_id,
+    uint32_t packet_index,
+    uniflow::UniflowPacket::PacketType type,
+    const std::vector<uint8_t>& payload,
+    uint32_t total_blocks,
+    const std::vector<uint8_t>& file_hash,
+    uint64_t original_file_size
+) {
     uniflow::UniflowPacket packet;
-    packet.set_file_name(message);
-    packet.set_block_id(0);
-    packet.set_packet_index(0);
-    packet.set_type(uniflow::UniflowPacket::DATA);
-    packet.set_payload(message);
-    packet.set_payload_size(static_cast<uint32_t>(message.size()));
-    packet.set_total_blocks(1);
-    packet.set_file_hash("");
-    packet.set_crc32(0);
+    packet.set_file_name(file_name);
+    packet.set_block_id(block_id);
+    packet.set_packet_index(packet_index);
+    packet.set_type(type);
+    packet.set_payload(payload.data(), payload.size());
+    packet.set_payload_size(static_cast<uint32_t>(payload.size()));
+    packet.set_total_blocks(total_blocks);
+    packet.set_file_hash(file_hash.data(), file_hash.size());
+    packet.set_original_file_size(original_file_size);
+
+    uint32_t payload_checksum = compute_crc32(payload);
+    packet.set_crc32(payload_checksum);
+
     return packet;
 }
 
