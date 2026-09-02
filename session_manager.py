@@ -13,7 +13,7 @@ def verify_final_file(file_path, expected_hash):
             for chunk in iter(lambda: f.read(4096), b""):
                 sha256.update(chunk)
         
-        calculated_hash = sha256.digest() # 32 raw bytes
+        calculated_hash = sha256.digest()
         if calculated_hash == expected_hash:
             print("SUCCESS: File received and validated.")
         else:
@@ -34,7 +34,7 @@ def main():
     
     completed_blocks = set()
     total_blocks_expected = None
-    file_path = "output_file.dat" # יש לעדכן לשם הקובץ שהתקבל
+    file_path = "output_file.dat"
     expected_file_hash = None
     
     with conn:
@@ -43,19 +43,16 @@ def main():
             if not data:
                 break
             
-            # פענוח אירוע הסטטוס מה-Receiver
             event = json.loads(data.decode('utf-8'))
             
             if event['type'] == "BLOCK_COMPLETE":
                 completed_blocks.add(event['block_id'])
                 print(f"Block {event['block_id']} completed.")
                 
-                # אתחול הנתונים אם זו ההודעה הראשונה
                 if total_blocks_expected is None:
                     total_blocks_expected = event['total_blocks']
                     expected_file_hash = bytes.fromhex(event['file_hash_hex']) 
                     
-                # בדיקה אם סיימנו את כל הבלוקים
                 if len(completed_blocks) == total_blocks_expected:
                     print("All blocks completed. Starting final hash verification...")
                     verify_final_file(file_path, expected_file_hash)
