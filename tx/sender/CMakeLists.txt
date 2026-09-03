@@ -20,6 +20,7 @@ add_executable(sender
     src/block_builder.cpp
     src/crc32.cpp
     src/interleaver.cpp
+    src/pipeline.cpp
     third_party/longhair/cauchy_256.cpp
     third_party/longhair/gf256.cpp
     third_party/longhair/SiameseTools.cpp
