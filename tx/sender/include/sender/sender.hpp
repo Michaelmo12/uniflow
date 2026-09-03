@@ -15,10 +15,11 @@
 int setup_ipc_socket(const char* socket_path);
 
 /**
- * Blocks until File Monitor connects and sends a message.
+ * Blocks until File Monitor connects and sends a file path.
  *
  * @param ipc_fd File descriptor of a socket already listening (from setup_ipc_socket)
- * @return The message received from File Monitor
+ * @return The message (file path in this case) received from File Monitor, or "" on failure
+ *         (accept or read error)
  */
 std::string wait_for_file_monitor(int ipc_fd);
 
