@@ -9,7 +9,8 @@
 #include <arpa/inet.h>
 
 
-int setup_ipc_socket(const char* socket_path) {
+int setup_ipc_socket(const char* socket_path) 
+{
     
     unlink(socket_path); // remove any leftover socket file from a previous run
 
@@ -40,7 +41,8 @@ int setup_ipc_socket(const char* socket_path) {
     return ipc_fd;
 }
 
-std::string wait_for_file_monitor(int ipc_fd){
+std::string wait_for_file_monitor(int ipc_fd)
+{
     //optionally hand you back who connected — their address but we dont need that 
     int client_fd = accept(ipc_fd, nullptr, nullptr);
     if (client_fd < 0) {
@@ -68,7 +70,8 @@ uniflow::UniflowPacket build_packet(
     uint32_t total_blocks,
     const std::vector<uint8_t>& file_hash,
     uint64_t original_file_size
-) {
+) 
+{
     uniflow::UniflowPacket packet;
     packet.set_file_name(file_name);
     packet.set_block_id(block_id);
@@ -86,14 +89,17 @@ uniflow::UniflowPacket build_packet(
     return packet;
 }
 
-bool send_packet(const uniflow::UniflowPacket& packet, const char* ip, int port) {
+bool send_packet(const uniflow::UniflowPacket& packet, const char* ip, int port) 
+{
     std::string wire_bytes;
-    if (!packet.SerializeToString(&wire_bytes)) {
+    if (!packet.SerializeToString(&wire_bytes)) 
+    {
         return false;
     }
 
     int udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udp_fd < 0) {
+    if (udp_fd < 0) 
+    {
         return false;
     }
 
