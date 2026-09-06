@@ -1,3 +1,10 @@
 
 generated/
 
+build/
+
+.vscode/
+
+__pycache__/
+
+watched_files/
