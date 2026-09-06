@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import logging
 import random
@@ -24,7 +23,7 @@ class Stats:
     def effective_drop_pct(self) -> float:
         return (self.dropped / self.received * 100.0) if self.received else 0.0
 
-
+# simulate packet drops with configurable randomness
 class ChaosDropper:
     def __init__(self, drop_rate: float, burst_mode: bool, correlation: float):
         self.drop_rate = drop_rate
@@ -32,6 +31,7 @@ class ChaosDropper:
         self.correlation = correlation
         self._last_dropped = False
 
+    # determine whether to drop the next packet based on the configured drop rate and burst mode
     def should_drop(self) -> bool:
         if self.burst_mode and random.random() < self.correlation:
             decision = self._last_dropped

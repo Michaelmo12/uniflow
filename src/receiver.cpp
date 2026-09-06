@@ -20,9 +20,13 @@
 #include "uniflow.pb.h"
 
 using namespace uniflow;
+// this file is the main entry point for the receiver program,
+//  which listens for incoming UDP packets, buffers them, reconstructs blocks using FEC,
+//  and writes them to disk. It also sends status updates to a Unix domain socket.
 
 namespace {
 
+// processes a completed block of packets, reconstructs missing packets using FEC if necessary,
 void process_completed_block(std::vector<UniflowPacket> block, FileManager& file_mgr, IpcClient& ipc) {
     if (block.empty()) return;
 
@@ -79,6 +83,7 @@ void process_completed_block(std::vector<UniflowPacket> block, FileManager& file
 std::atomic<bool> g_running{true};
 void handle_signal(int) { g_running.store(false); }
 
+// creates a UDP socket, binds it to the configured port, and returns the socket file descriptor
 int make_listen_socket() {
     const int sock = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
@@ -119,7 +124,7 @@ int main() {
         std::cerr << "fatal: fec::init() failed (longhair library/header version mismatch)\n";
         return 1;
     }
-
+    // sets up signal handlers for graceful shutdown and ignores SIGPIPE and SIGXFSZ
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
     std::signal(SIGPIPE, SIG_IGN);
@@ -144,6 +149,7 @@ int main() {
     std::vector<char> buffer(cfg::MAX_DATAGRAM_SIZE);
     auto last_sweep = std::chrono::steady_clock::now();
 
+    // main loop: receives UDP packets, buffers them, reconstructs blocks using FEC, and writes them to disk
     while (g_running.load()) {
         const auto now = std::chrono::steady_clock::now();
         if (now - last_sweep >= cfg::STALE_SWEEP_INTERVAL) {

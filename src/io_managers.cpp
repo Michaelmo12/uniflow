@@ -12,6 +12,8 @@
 #include <unistd.h>
 
 using uniflow::UniflowPacket;
+// this file is in charge of managing file descriptors for writing received packets to disk, 
+// and sending status updates to the status socket
 
 FileManager::~FileManager() {
     std::lock_guard<std::mutex> lk(mtx_);
@@ -21,6 +23,9 @@ FileManager::~FileManager() {
     }
 }
 
+// sanitizes a file name by removing any path components ( '/' or '\')
+//  and replacing empty or invalid names with "unnamed_file"
+// protects against directory traversal attacks and ensures that the file is created in the output directory
 std::string FileManager::sanitize(const std::string& name) {
     std::string out;
     out.reserve(name.size());
@@ -32,6 +37,7 @@ std::string FileManager::sanitize(const std::string& name) {
     return out;
 }
 
+// gets a file descriptor for writing to a file with the given name, hash, and size
 int FileManager::get_fd(const std::string& file_name, const std::string& file_hash,
                         uint64_t file_size) {
     std::lock_guard<std::mutex> lk(mtx_);
@@ -52,16 +58,20 @@ int FileManager::get_fd(const std::string& file_name, const std::string& file_ha
     return fd;
 }
 
+// manages a Unix domain socket connection to send status updates to session_manager.py
 IpcClient::IpcClient(std::string path) : path_(std::move(path)) {
     std::lock_guard<std::mutex> lk(mtx_);
+    // attempts to connect to the socket immediately, but will retry on the first send if it fails
     connect_locked();
 }
 
+// closes the socket file descriptor if it is open
 IpcClient::~IpcClient() {
     std::lock_guard<std::mutex> lk(mtx_);
     if (fd_ >= 0) ::close(fd_);
 }
 
+// attempts to connect to the Unix domain socket, returns true if successful, false otherwise
 bool IpcClient::connect_locked() {
     if (fd_ >= 0) return true;
 
@@ -80,6 +90,7 @@ bool IpcClient::connect_locked() {
     return true;
 }
 
+// sends a JSON string to the connected Unix domain socket, reconnecting if necessary
 void IpcClient::send_json(const std::string& json) {
     std::lock_guard<std::mutex> lk(mtx_);
     if (fd_ < 0 && !connect_locked()) {
@@ -96,6 +107,8 @@ void IpcClient::send_json(const std::string& json) {
     }
 }
 
+// manages a buffer of received packets for each block, 
+// and reconstructs missing packets using FEC when enough packets are received
 bool BlockBufferManager::add_packet(UniflowPacket&& pkt, std::vector<UniflowPacket>& out) {
     std::lock_guard<std::mutex> lk(mtx_);
     BlockKey key{pkt.file_name(), pkt.block_id()};
@@ -117,6 +130,7 @@ bool BlockBufferManager::add_packet(UniflowPacket&& pkt, std::vector<UniflowPack
     return false;
 }
 
+// removes any blocks that have not been updated within the given timeout duration,
 std::vector<BlockBufferManager::TimedOutBlock>
 BlockBufferManager::sweep_stale(std::chrono::steady_clock::duration timeout) {
     std::vector<TimedOutBlock> out;

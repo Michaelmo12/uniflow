@@ -4,12 +4,17 @@
 #include <cstdio>
 #include <sstream>
 
+// this file contains utility functions for computing CRC32 checksums,
+//  converting bytes to hex strings, and creating JSON status messages
+
+// computes the CRC32 checksum of a string using a precomputed table
 uint32_t crc32(const std::string& data) {
     static const std::array<uint32_t, 256> table = [] {
         std::array<uint32_t, 256> t{};
         for (uint32_t i = 0; i < 256; ++i) {
             uint32_t c = i;
             for (int k = 0; k < 8; ++k) {
+                // uses the polynomial 0xEDB88320 for CRC32
                 c = (c & 1u) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
             }
             t[i] = c;
@@ -17,6 +22,7 @@ uint32_t crc32(const std::string& data) {
         return t;
     }();
 
+    // computes the CRC32 checksum of the input data using the precomputed table
     uint32_t crc = 0xFFFFFFFFu;
     for (unsigned char byte : data) {
         crc = table[(crc ^ byte) & 0xFFu] ^ (crc >> 8);
@@ -36,6 +42,7 @@ std::string bytes_to_hex(const std::string& bytes) {
 }
 
 namespace {
+// appends a 32-bit unsigned integer to a string in little-endian order
 void append_le32(std::string& out, uint32_t v) {
     out += static_cast<char>(v & 0xFF);
     out += static_cast<char>((v >> 8) & 0xFF);
@@ -43,6 +50,7 @@ void append_le32(std::string& out, uint32_t v) {
     out += static_cast<char>((v >> 24) & 0xFF);
 }
 
+// appends a 64-bit unsigned integer to a string in little-endian order
 void append_le64(std::string& out, uint64_t v) {
     for (unsigned int shift = 0; shift < 64; shift += 8) {
         out += static_cast<char>((v >> shift) & 0xFF);
