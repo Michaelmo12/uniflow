@@ -145,7 +145,7 @@ BlockBufferManager::sweep_stale(std::chrono::steady_clock::duration timeout) {
                 it->first.block_id,
                 first_pkt.total_blocks(),
                 bytes_to_hex(first_pkt.file_hash()),
-                first_pkt.file_size(),
+                first_pkt.original_file_size(),
                 it->second.packets.size(),
             });
             resolved_.insert(it->first);

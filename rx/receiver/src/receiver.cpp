@@ -36,7 +36,7 @@ void process_completed_block(std::vector<UniflowPacket> block, FileManager& file
     const uint32_t total_blocks = block.front().total_blocks();
     const std::string file_hash_hex = bytes_to_hex(block.front().file_hash());
     const std::string file_hash = block.front().file_hash();
-    const uint64_t file_size = block.front().file_size();
+    const uint64_t file_size = block.front().original_file_size();
 
     if (!fec::reconstruct_block(block)) {
         std::cerr << "[receiver] block " << block_id << " of '" << file_name
@@ -200,7 +200,7 @@ int main() {
                           << std::dec << " block=" << pkt.block_id()
                           << " index=" << pkt.packet_index()
                           << " payload=" << pkt.payload().size()
-                          << " file_size=" << pkt.file_size() << "\n";
+                          << " file_size=" << pkt.original_file_size() << "\n";
             }
             continue;
         }

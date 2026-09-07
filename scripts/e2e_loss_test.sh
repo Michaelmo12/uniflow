@@ -54,11 +54,12 @@ mkdir -p "$WATCH_DIR" "$RX_DIR/received_files"
 rm -f "$RECEIVED_FILE" /tmp/uniflow_status.sock /tmp/uniflow_monitor_to_sender.sock
 
 printf 'Building receiver...\n'
-(cd "$RX_DIR" && make clean && make)
+cmake -S "$RX_DIR" -B "$RX_DIR/build" >/dev/null
+cmake --build "$RX_DIR/build" --parallel >/dev/null
 
 printf 'Generating sender protobuf and building sender...\n'
 mkdir -p "$SENDER_DIR/generated" "$SENDER_DIR/build"
-protoc --cpp_out="$SENDER_DIR/generated" -I "$RX_DIR" "$RX_DIR/uniflow.proto"
+protoc --cpp_out="$SENDER_DIR/generated" -I "$ROOT_DIR/proto" "$ROOT_DIR/proto/uniflow.proto"
 cmake -S "$SENDER_DIR" -B "$SENDER_DIR/build" >/dev/null
 cmake --build "$SENDER_DIR/build" --parallel >/dev/null
 
