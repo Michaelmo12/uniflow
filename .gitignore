@@ -8,3 +8,5 @@ build/
 __pycache__/
 
 watched_files/
+
+received_files/

@@ -76,7 +76,7 @@ done
 [[ -S /tmp/uniflow_status.sock ]] || { echo "session manager socket was not created" >&2; exit 1; }
 
 printf 'Starting receiver...\n'
-(cd "$RX_DIR" && exec ./receiver) >"$RUN_DIR/receiver.log" 2>&1 &
+(cd "$RX_DIR" && exec ./build/receiver) >"$RUN_DIR/receiver.log" 2>&1 &
 receiver_pid=$!
 
 printf 'Starting chaos router at %.2f%% loss...\n' "$DROP_RATE_PERCENT"
