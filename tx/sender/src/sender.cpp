@@ -83,9 +83,7 @@ uniflow::UniflowPacket build_packet(
     packet.set_file_hash(file_hash.data(), file_hash.size());
     packet.set_file_size(original_file_size);
 
-    packet.set_crc32(compute_crc32_frame(
-        payload, block_id, packet_index, static_cast<uint8_t>(type),
-        static_cast<uint32_t>(payload.size()), original_file_size));
+    packet.set_crc32(compute_crc32(payload));
 
     return packet;
 }

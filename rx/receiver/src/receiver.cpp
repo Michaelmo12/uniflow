@@ -3,6 +3,7 @@
 #include <csignal>
 #include <cstring>
 #include <iostream>
+#include <iomanip>
 #include <vector>
 
 #include <errno.h>
@@ -148,6 +149,11 @@ int main() {
 
     std::vector<char> buffer(cfg::MAX_DATAGRAM_SIZE);
     auto last_sweep = std::chrono::steady_clock::now();
+    uint64_t datagrams_received = 0;
+    uint64_t parse_failures = 0;
+    uint64_t crc_failures = 0;
+    uint64_t packets_accepted = 0;
+    uint64_t blocks_completed = 0;
 
     // main loop: receives UDP packets, buffers them, reconstructs blocks using FEC, and writes them to disk
     while (g_running.load()) {
@@ -176,21 +182,37 @@ int main() {
             continue;
         }
         if (n == 0) continue;
+        ++datagrams_received;
 
         UniflowPacket pkt;
         if (!pkt.ParseFromArray(buffer.data(), static_cast<int>(n))) {
+            ++parse_failures;
             std::cerr << "[receiver] dropped unparsable datagram (" << n << " bytes)\n";
             continue;
         }
 
-        if (crc32_frame(pkt.payload(), pkt.block_id(), pkt.packet_index(),
-                         static_cast<uint8_t>(pkt.type()), pkt.payload_size(),
-                         pkt.file_size()) != pkt.crc32()) {
+        const uint32_t expected_crc = crc32(pkt.payload());
+        if (expected_crc != pkt.crc32()) {
+            ++crc_failures;
+            if (crc_failures == 1 || crc_failures % 100 == 0) {
+                std::cerr << "[receiver] CRC mismatch: received=0x"
+                          << std::hex << pkt.crc32() << " expected=0x" << expected_crc
+                          << std::dec << " block=" << pkt.block_id()
+                          << " index=" << pkt.packet_index()
+                          << " payload=" << pkt.payload().size()
+                          << " file_size=" << pkt.file_size() << "\n";
+            }
             continue;
         }
 
+        ++packets_accepted;
         std::vector<UniflowPacket> completed_block;
         if (block_mgr.add_packet(std::move(pkt), completed_block)) {
+            ++blocks_completed;
+            std::cerr << "[receiver] block ready: blocks=" << blocks_completed
+                      << " datagrams=" << datagrams_received
+                      << " accepted=" << packets_accepted
+                      << " crc_failures=" << crc_failures << "\n";
             pool.enqueue([blk = std::move(completed_block), &file_mgr, &ipc]() mutable {
                 process_completed_block(std::move(blk), file_mgr, ipc);
             });
