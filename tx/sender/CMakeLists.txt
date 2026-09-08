@@ -9,6 +9,20 @@ find_package(Protobuf REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
 
+set(PROTO_ROOT ${CMAKE_SOURCE_DIR}/../../proto)
+set(PROTO_FILE ${PROTO_ROOT}/uniflow.proto)
+set(GENERATED_DIR ${CMAKE_SOURCE_DIR}/generated)
+set(PROTO_SRC ${GENERATED_DIR}/uniflow.pb.cc)
+set(PROTO_HDR ${GENERATED_DIR}/uniflow.pb.h)
+
+add_custom_command(
+    OUTPUT ${PROTO_SRC} ${PROTO_HDR}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED_DIR}
+    COMMAND protobuf::protoc --cpp_out=${GENERATED_DIR} -I ${PROTO_ROOT} ${PROTO_FILE}
+    DEPENDS ${PROTO_FILE}
+    COMMENT "Generating protobuf sources from ${PROTO_FILE}"
+)
+
 include_directories(${Protobuf_INCLUDE_DIRS} include generated third_party/longhair)
 
 add_executable(sender
@@ -24,7 +38,7 @@ add_executable(sender
     third_party/longhair/cauchy_256.cpp
     third_party/longhair/gf256.cpp
     third_party/longhair/SiameseTools.cpp
-    generated/uniflow.pb.cc
+    ${PROTO_SRC}
 )
 
 

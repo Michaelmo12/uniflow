@@ -10,7 +10,9 @@ Sender reads it, hashes it, splits it into FEC blocks, encodes parity,
 and sends everything to Receiver over UDP.
 
 This covers TX only. Receiver/Session Manager (RX) is a separate
-component, run on a separate machine — not covered here.
+component, run on a separate machine — see
+[rx/receiver/README.md](../rx/receiver/README.md). For the full pipeline
+picture, see the [root README](../README.md).
 
 ## Prerequisites
 
@@ -23,13 +25,12 @@ pip install inotify_simple --break-system-packages
 
 ## Build
 
-From the repo root:
+Protobuf sources are generated from `proto/uniflow.proto` automatically as
+part of the build — no manual `protoc` step needed.
+
 ```bash
-protoc --cpp_out=tx/sender/generated -I proto proto/uniflow.proto
-cd tx/sender
-mkdir -p build && cd build
-cmake ..
-make
+cmake -S tx/sender -B tx/sender/build
+cmake --build tx/sender/build --parallel
 ```
 
 ## Configuration
@@ -95,6 +96,9 @@ Drop a file into the watched folder:
 ```bash
 echo "hello" > /path/to/watched/folder/test.txt
 ```
+
+Need bigger files to test with? `../scripts/make_test_files.sh` generates
+random test files at 1M/10M/100M/200M/500M/900M (or custom sizes).
 
 File Monitor's terminal should log the notification, and Sender's
 terminal should show it processing the file end to end:
