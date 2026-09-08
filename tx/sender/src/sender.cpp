@@ -61,6 +61,15 @@ std::string wait_for_file_monitor(int ipc_fd)
     return message;
 }
 
+int setup_udp_socket()
+{
+    int udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp_fd < 0) {
+        return -1;
+    }
+    return udp_fd;
+}
+
 uniflow::UniflowPacket build_packet(
     const std::string& file_name,
     uint32_t block_id,
@@ -88,7 +97,8 @@ uniflow::UniflowPacket build_packet(
     return packet;
 }
 
-bool send_packet(const uniflow::UniflowPacket& packet, const char* ip, int port) 
+bool send_packet(int udp_fd, const uniflow::UniflowPacket& packet,
+                 const sockaddr_in& receiver_addr)
 {
     std::string wire_bytes;
     if (!packet.SerializeToString(&wire_bytes)) 
@@ -96,20 +106,8 @@ bool send_packet(const uniflow::UniflowPacket& packet, const char* ip, int port)
         return false;
     }
 
-    int udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udp_fd < 0) 
-    {
-        return false;
-    }
-
-    sockaddr_in receiver_addr{};
-    receiver_addr.sin_family = AF_INET;
-    receiver_addr.sin_port = htons(port);
-    inet_pton(AF_INET, ip, &receiver_addr.sin_addr);
-
     ssize_t sent = sendto(udp_fd, wire_bytes.data(), wire_bytes.size(), 0,
                            (sockaddr*)&receiver_addr, sizeof(receiver_addr));
 
-    close(udp_fd);
     return sent >= 0;
 }

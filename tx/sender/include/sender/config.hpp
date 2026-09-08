@@ -16,3 +16,5 @@ constexpr int MAX_IPC_MESSAGE_SIZE = 1024;
 constexpr uint32_t FEC_N = 100;    // data packets per block
 constexpr uint32_t FEC_K = 70;     // parity packets per block
 constexpr int PAYLOAD_SIZE = 1024; // bytes per packet (file content chunk size)
+constexpr unsigned int PACKET_BATCH_SIZE = 25;
+constexpr unsigned int PACKET_BATCH_DELAY_US = 1000;

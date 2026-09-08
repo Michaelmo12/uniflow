@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <netinet/in.h>
 #include "uniflow.pb.h"
 
 /**
@@ -25,7 +26,10 @@ std::vector<std::vector<uniflow::UniflowPacket>> build_packets_for_file(const st
  *        produced by build_packets_for_file)
  * @return How many packets were sent successfully, out of the total
  */
-uint32_t send_all_packets(const std::vector<std::vector<uniflow::UniflowPacket>>& blocks_of_packets);
+uint32_t send_all_packets(
+	int udp_fd,
+	const sockaddr_in& receiver_addr,
+	const std::vector<std::vector<uniflow::UniflowPacket>>& blocks_of_packets);
 
 /**
  * Fully processes one file notified by File Monitor: builds every packet
@@ -33,4 +37,5 @@ uint32_t send_all_packets(const std::vector<std::vector<uniflow::UniflowPacket>>
  *
  * @param file_path Path of the file to process, as received from File Monitor
  */
-void process_file(const std::string& file_path);
+void process_file(int udp_fd, const sockaddr_in& receiver_addr,
+				  const std::string& file_path);

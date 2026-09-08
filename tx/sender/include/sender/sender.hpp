@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <netinet/in.h>
 
 #include "uniflow.pb.h"
 
@@ -22,6 +23,14 @@ int setup_ipc_socket(const char* socket_path);
  *         (accept or read error)
  */
 std::string wait_for_file_monitor(int ipc_fd);
+
+/**
+ * Creates a UDP socket meant to be reused for many sends, rather than
+ * opened fresh per packet.
+ *
+ * @return The socket's file descriptor, or -1 on failure
+ */
+int setup_udp_socket();
 
 /**
  * Builds a fully-populated UniflowPacket, including computing crc32 over
@@ -49,11 +58,12 @@ uniflow::UniflowPacket build_packet(
 );
 
 /**
- * Serializes the packet and sends it as one UDP datagram to the given address.
+ * Sends one packet over an already-open UDP socket to a fixed destination.
  *
+ * @param udp_fd An open UDP socket, from setup_udp_socket()
  * @param packet The packet to send
- * @param ip Destination IP address as a string, e.g. "127.0.0.1"
- * @param port Destination UDP port
+ * @param receiver_addr The destination address, built once by the caller
  * @return true on success, false on failure
  */
-bool send_packet(const uniflow::UniflowPacket& packet, const char* ip, int port);
+bool send_packet(int udp_fd, const uniflow::UniflowPacket& packet,
+                 const sockaddr_in& receiver_addr);

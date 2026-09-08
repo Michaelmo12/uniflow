@@ -101,6 +101,13 @@ int make_listen_socket() {
                      "kernel-level drops before packets ever reach the CRC check\n";
     }
 
+    int actual_rcvbuf = 0;
+    socklen_t actual_rcvbuf_size = sizeof(actual_rcvbuf);
+    if (::getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &actual_rcvbuf,
+                     &actual_rcvbuf_size) == 0) {
+        std::cerr << "[receiver] UDP receive buffer: " << actual_rcvbuf << " bytes\n";
+    }
+
     timeval rcv_timeout{1, 0};
     ::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout));
 

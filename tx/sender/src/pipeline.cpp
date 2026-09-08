@@ -1,8 +1,9 @@
 #include <iostream>
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 #include <filesystem>
-#include <unistd.h>
 
 #include "uniflow.pb.h"
 #include "sender/sender.hpp"
@@ -15,7 +16,6 @@
 
 std::vector<std::vector<uniflow::UniflowPacket>> build_packets_for_file(const std::string& file_path) 
 {
-
     std::vector<uint8_t> file_bytes = read_file(file_path);
     if (file_bytes.empty()) 
     {
@@ -79,24 +79,32 @@ std::vector<std::vector<uniflow::UniflowPacket>> build_packets_for_file(const st
     return blocks_of_packets;
 }
 
-uint32_t send_all_packets(const std::vector<std::vector<uniflow::UniflowPacket>>& blocks_of_packets) {
+uint32_t send_all_packets(
+    int udp_fd,
+    const sockaddr_in& receiver_addr,
+    const std::vector<std::vector<uniflow::UniflowPacket>>& blocks_of_packets) {
     std::vector<uniflow::UniflowPacket> send_order = interleave(blocks_of_packets);
 
     std::cout << "Sending " << send_order.size() << " packets to "
               << RECEIVER_IP << ":" << RECEIVER_PORT << "...\n";
 
     uint32_t packets_sent = 0;
+    uint32_t packets_attempted = 0;
     for (const uniflow::UniflowPacket& packet : send_order) {
-        if (send_packet(packet, RECEIVER_IP, RECEIVER_PORT)) {
+        ++packets_attempted;
+        if (send_packet(udp_fd, packet, receiver_addr)) {
             packets_sent++;
         }
+        if ((packets_attempted % PACKET_BATCH_SIZE) == 0 && packets_attempted < send_order.size()) {
+            std::this_thread::sleep_for(std::chrono::microseconds(PACKET_BATCH_DELAY_US));
+        }
     }
-
     std::cout << "Sent " << packets_sent << " / " << send_order.size() << " packets\n";
     return packets_sent;
 }
 
-void process_file(const std::string& file_path) {
+void process_file(int udp_fd, const sockaddr_in& receiver_addr,
+                  const std::string& file_path) {
     std::cout << "Received file path: " << file_path << "\n";
 
     std::vector<std::vector<uniflow::UniflowPacket>> blocks_of_packets = build_packets_for_file(file_path);
@@ -104,5 +112,5 @@ void process_file(const std::string& file_path) {
         return;
     }
 
-    send_all_packets(blocks_of_packets);
+    send_all_packets(udp_fd, receiver_addr, blocks_of_packets);
 }

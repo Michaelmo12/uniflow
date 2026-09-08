@@ -37,9 +37,36 @@ make
 Edit `tx/sender/include/sender/config.hpp` before running on real hardware:
 - `RECEIVER_IP` — currently `127.0.0.1` for local testing; set to the real
   RX machine's IP address for an actual two-machine transfer.
-- `RECEIVER_PORT` — `5004`, must match Receiver's listening port.
+- `RECEIVER_PORT` — `5005` for direct transfer to Receiver. Use `5004` only
+  when a Chaos Router is running on the sender host.
 - `FEC_N` / `FEC_K` / `PAYLOAD_SIZE` — must match Receiver's values exactly
   (currently 100 / 70 / 1024) or reconstruction will fail.
+
+## Receiver host network setup
+
+The Receiver requests a 4 MB UDP receive buffer. Linux may cap that request
+with `net.core.rmem_max`, so run this once on the Receiver computer before
+large or high-rate transfers:
+
+```bash
+sudo sysctl -w net.core.rmem_max=8388608
+sudo sysctl -w net.core.rmem_default=8388608
+```
+
+Verify the values with:
+
+```bash
+sysctl net.core.rmem_max net.core.rmem_default
+```
+
+These settings are runtime settings and reset after reboot. To make them
+persistent, add the following lines to `/etc/sysctl.d/99-uniflow.conf` and
+run `sudo sysctl --system`:
+
+```text
+net.core.rmem_max=8388608
+net.core.rmem_default=8388608
+```
 
 ## Run
 
