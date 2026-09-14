@@ -1,0 +1,14 @@
+
+generated/
+
+build/
+
+.vscode/
+
+__pycache__/
+
+watched_files/
+
+received_files/
+
+test_files/

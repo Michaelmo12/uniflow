@@ -1,0 +1,100 @@
+# Uniflow — RX (Receiver)
+
+Listens on UDP for FEC-encoded packets, reconstructs each block with
+Reed-Solomon (any `FEC_K` of `FEC_N` shards is enough), reassembles the
+file, and writes it to `received_files/`.
+
+Two processes: **Receiver** (C++) does the actual reassembly/decoding.
+**Session Manager** (Python) watches for a completed file, re-hashes it, and
+reports `SUCCESS`/`FAILED` — that's the real pass/fail signal for a transfer,
+not just "Receiver didn't crash".
+
+This covers RX only. Sender/File Monitor (TX) is a separate component,
+run on a separate machine — see [tx/README.md](../../tx/README.md).
+
+## Prerequisites
+
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake protobuf-compiler libprotobuf-dev \
+                     libssl-dev zlib1g-dev python3-pip
+```
+
+## Build
+
+```bash
+cmake -S . -B build
+cmake --build build --parallel
+```
+
+Protobuf sources are generated from `proto/uniflow.proto` automatically as
+part of the build (see `CMakeLists.txt`) — no manual `protoc` step needed.
+
+## Configuration
+
+Edit `include/config.hpp` before running on real hardware:
+
+- `LISTEN_PORT` — `5005`, must match what Sender (or Chaos Router) sends to.
+- `N` / `K` / `PAYLOAD_SIZE` — must match Sender's `FEC_N` / `FEC_K` /
+  `PAYLOAD_SIZE` exactly (currently 100 / 70 / 1024) or reconstruction fails.
+- `OUTPUT_DIR` — where completed files land (`received_files/`, relative to
+  wherever the binary runs from).
+- `STALE_BLOCK_TIMEOUT` / `STALE_SWEEP_INTERVAL` — how long an incomplete
+  block is kept around waiting for more shards before it's given up on.
+
+## Network setup (real transfers)
+
+The Receiver requests a 4 MB UDP receive buffer. Linux caps that with
+`net.core.rmem_max`, so bump it once on this machine before large or
+high-rate transfers:
+
+```bash
+sudo sysctl -w net.core.rmem_max=8388608
+sudo sysctl -w net.core.rmem_default=8388608
+```
+
+Verify with `sysctl net.core.rmem_max net.core.rmem_default`. These reset on
+reboot — to persist, add the two lines above to
+`/etc/sysctl.d/99-uniflow.conf` and run `sudo sysctl --system`.
+
+## Run
+
+Two terminals, Session Manager first so it's ready to catch the first
+completed file:
+
+**Terminal 1 — Session Manager:**
+```bash
+cd ../monitor
+python3 session_manager.py
+```
+
+**Terminal 2 — Receiver:**
+```bash
+cd build
+./receiver
+```
+
+Both run indefinitely, handling one file after another.
+
+Optional — to test FEC recovery under simulated packet loss, put
+`rx/monitor/chaos_router.py` between Sender and Receiver instead of sending
+straight to `LISTEN_PORT`. See the root [README.md](../../README.md) for the
+full pipeline and [scripts/e2e_loss_test.sh](../../scripts/e2e_loss_test.sh)
+for an automated example.
+
+## Verify it's working
+
+Once Sender transmits a file, Receiver's terminal logs it reassembling
+blocks, and Session Manager's terminal prints:
+
+```
+SUCCESS: File received and validated.
+```
+
+or, if the hash doesn't match (e.g. too much loss for the FEC to recover):
+
+```
+FAILED: Hash mismatch.
+```
+
+Completed files show up in `received_files/`.
