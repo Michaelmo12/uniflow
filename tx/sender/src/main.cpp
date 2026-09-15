@@ -27,10 +27,11 @@ int main() {
     }
 
     sockaddr_in receiver_addr{};
+    //address family, port, and IP address to the receiver_addr struct
     receiver_addr.sin_family = AF_INET;
     receiver_addr.sin_port = htons(RECEIVER_PORT);
     if (inet_pton(AF_INET, RECEIVER_IP, &receiver_addr.sin_addr) != 1) {
-        std::cerr << "Failed to parse receiver address: " << RECEIVER_IP << "\n";
+        std::cerr << "Invalid IPv4 address in RECEIVER_IP: \"" << RECEIVER_IP << "\"\n";
         close(udp_fd);
         return 1;
     }
